@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My AI Studio</title>
+<style>
+  :root{--bg:#0f1115;--card:#1a1d24;--text:#f2f3f5;--mute:#9aa0ab;--accent:#7c5cff;--line:#2b2f39}
+  @media (prefers-color-scheme: light){
+    :root{--bg:#f5f6f8;--card:#fff;--text:#14161a;--mute:#5d6470;--line:#dde0e6}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);padding:16px;max-width:640px;margin-inline:auto}
+  h1{font-size:22px;margin:4px 0 14px}
+  .tabs{display:flex;gap:8px;margin-bottom:12px}
+  .tab{flex:1;padding:12px;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;font-size:16px}
+  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  textarea,input,select{width:100%;padding:12px;font-size:16px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);margin:6px 0 10px}
+  textarea{min-height:90px;resize:vertical}
+  label{font-size:13px;color:var(--mute)}
+  button.go{width:100%;padding:14px;font-size:17px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:600}
+  button.go:disabled{opacity:.6}
+  .row{display:flex;gap:10px}.row>div{flex:1}
+  #out img,#out video{width:100%;border-radius:12px;margin-top:10px;display:block}
+  .msg{font-size:14px;color:var(--mute);margin-top:10px;line-height:1.45}
+  .err{color:#ff6b6b}
+  a.dl{display:inline-block;margin-top:8px;color:var(--accent);font-size:15px}
+  details summary{cursor:pointer;font-size:15px}
+</style>
+</head>
+<body>
+<h1>✨ My AI Studio</h1>
+
+<div class="tabs">
+  <button class="tab on" id="tImg">🖼 Image</button>
+  <button class="tab" id="tVid">🎬 Video</button>
+</div>
+
+<div class="card">
+  <label for="prompt">Describe what you want</label>
+  <textarea id="prompt" placeholder="A cute robot painting a sunset, colorful, detailed"></textarea>
+
+  <div id="imgOpts" class="row">
+    <div><label>Shape</label>
+      <select id="size">
+        <option value="1024x1024">Square</option>
+        <option value="768x1344">Phone (tall)</option>
+        <option value="1344x768">Wide</option>
+      </select></div>
+  </div>
+
+  <div id="vidOpts" class="row" style="display:none">
+    <div><label>Shape</label>
+      <select id="aspect"><option>16:9</option><option>9:16</option></select></div>
+    <div><label>Seconds</label>
+      <select id="dur"><option>5</option><option>3</option><option>8</option></select></div>
+  </div>
+
+  <button class="go" id="go">Generate image</button>
+  <div class="msg" id="msg"></div>
+  <div id="out"></div>
+</div>
+
+<div class="card">
+  <details>
+    <summary>⚙️ Settings (needed for video)</summary>
+    <p class="msg">Images work with no key. Video needs a Pollinations key (free to create, video uses credits).
+      Make one at <b>enter.pollinations.ai</b>, then paste it here. It stays only on this phone.</p>
+    <label for="key">Pollinations key</label>
+    <input id="key" type="password" placeholder="sk_... (optional for images)">
+    <button class="go" id="save" style="background:var(--line);color:var(--text)">Save key</button>
+  </details>
+</div>
+
+<script>
+var mode = "image";
+var $ = function(id){ return document.getElementById(id); };
+
+function getKey(){ try { return localStorage.getItem("pk") || ""; } catch(e){ return ""; } }
+function setKey(v){ try { localStorage.setItem("pk", v); } catch(e){} }
+$("key").value = getKey();
+
+$("save").onclick = function(){ setKey($("key").value.trim()); $("msg").textContent = "Key saved on this phone."; };
+
+function setMode(m){
+  mode = m;
+  $("tImg").className = "tab" + (m==="image" ? " on" : "");
+  $("tVid").className = "tab" + (m==="video" ? " on" : "");
+  $("imgOpts").style.display = m==="image" ? "flex" : "none";
+  $("vidOpts").style.display = m==="video" ? "flex" : "none";
+  $("go").textContent = m==="image" ? "Generate image" : "Generate video";
+  $("out").innerHTML = ""; $("msg").textContent = "";
+}
+$("tImg").onclick = function(){ setMode("image"); };
+$("tVid").onclick = function(){ setMode("video"); };
+
+function busy(on, text){
+  $("go").disabled = on;
+  $("msg").className = "msg";
+  $("msg").textContent = text || "";
+}
+function fail(text){
+  $("go").disabled = false;
+  $("msg").className = "msg err";
+  $("msg").textContent = text;
+}
+
+$("go").onclick = function(){
+  var p = $("prompt").value.trim();
+  if(!p){ fail("Please type a description first."); return; }
+  var key = getKey();
+  var enc = encodeURIComponent(p);
+  var seed = Math.floor(Math.random()*1000000);
+  $("out").innerHTML = "";
+
+  if(mode === "image"){
+    var wh = $("size").value.split("x");
+    var url = key
+      ? "https://gen.pollinations.ai/image/" + enc + "?key=" + encodeURIComponent(key) + "&width=" + wh[0] + "&height=" + wh[1] + "&seed=" + seed
+      : "https://image.pollinations.ai/prompt/" + enc + "?width=" + wh[0] + "&height=" + wh[1] + "&seed=" + seed + "&nologo=true";
+    busy(true, "Creating your image... this can take up to a minute.");
+    var img = new Image();
+    img.onload = function(){
+      busy(false, "");
+      $("out").appendChild(img);
+      var a = document.createElement("a");
+      a.className = "dl"; a.href = url; a.target = "_blank"; a.textContent = "Open full image (then long-press to save)";
+      $("out").appendChild(a);
+    };
+    img.onerror = function(){
+      fail("Image failed. The free service may be busy - wait 20 seconds and try again.");
+    };
+    img.src = url;
+  } else {
+    if(!key){ fail("Video needs a key. Open Settings below and paste your Pollinations key."); return; }
+    var vurl = "https://gen.pollinations.ai/video/" + enc + "?key=" + encodeURIComponent(key)
+      + "&duration=" + $("dur").value + "&aspectRatio=" + encodeURIComponent($("aspect").value) + "&seed=" + seed;
+    busy(true, "Creating your video... this can take 1-3 minutes. Keep this page open.");
+    var v = document.createElement("video");
+    v.controls = true; v.playsInline = true; v.loop = true;
+    v.onloadeddata = function(){
+      busy(false, "");
+      $("out").appendChild(v);
+      var a = document.createElement("a");
+      a.className = "dl"; a.href = vurl; a.target = "_blank"; a.textContent = "Open video (then download)";
+      $("out").appendChild(a);
+      v.play();
+    };
+    v.onerror = function(){
+      fail("Video failed. Check your key and that you have credits (Pollen) in your Pollinations account.");
+    };
+    v.src = vurl;
+  }
+};
+</script>
+</body>
+</html>
